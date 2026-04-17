@@ -1,95 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
-
-type VermiData = {
-  income: number
-  investment: number
-  reinvestRate?: number
-  months?: number
-}
-
-type Insight = {
-  label: 'LOW' | 'MEDIUM' | 'HIGH'
-  message: string
-  recommendation: string
-}
-
-function simulateGrowth(data: VermiData) {
-  const months = data.months ?? 12
-  const reinvest = data.reinvestRate ?? 0.5
-
-  const monthlyIncome = data.income * 30
-
-  let capital = data.investment
-  const history: number[] = []
-
-  for (let i = 0; i < months; i++) {
-    const profit = monthlyIncome + capital * 0.02
-
-    const reinvested = profit * reinvest
-    const withdrawn = profit * (1 - reinvest)
-
-    capital += reinvested
-
-    history.push(capital + withdrawn)
-  }
-
-  return {
-    finalCapital: capital,
-    history,
-  }
-}
-
-function calculateScore(finalCapital: number, initial: number, months: number) {
-  const growth = finalCapital / initial
-
-  const annualized = Math.pow(growth, 12 / months) - 1
-
-  const score = Math.min(100, Math.max(0, annualized * 100))
-
-  return {
-    growth,
-    score,
-  }
-}
-
-function generateInsight(
-  score: number,
-  growth: number,
-  reinvestRate: number,
-): Insight {
-  if (score > 75 && reinvestRate > 0.6) {
-    return {
-      label: 'HIGH',
-      message: 'Aggressive compounding strategy detected.',
-      recommendation: 'Consider reducing reinvestment to stabilize returns.',
-    }
-  }
-  if (score > 50) {
-    return {
-      label: 'MEDIUM',
-      message: 'Balanced growth stradegy.',
-      recommendation:
-        'You are on a stable path. Slight reinvestment increase could improve results.',
-    }
-  }
-  return {
-    label: 'LOW',
-    message: 'Weak compounding performance.',
-    recommendation:
-      'Increase reinvest rate or investment capital to improve growth.',
-  }
-}
+import { simulate, calculateScore, VermiData } from '@/lib/simulation'
+import { generateInsight } from '@/lib/ai'
+import { Chart } from '@/components/Chart'
 
 export default function Dashboard() {
   const [data, setData] = useState<VermiData | null>(null)
@@ -102,16 +16,7 @@ export default function Dashboard() {
 
     if (saved) {
       try {
-        const parsed = JSON.parse(saved)
-
-        const safeData = {
-          income: Number(parsed.income) || 0,
-          investment: Number(parsed.investment) || 0,
-          reinvestRate: Number(parsed.reinvestRate) || 0.5,
-          months: Number(parsed.months) || 12,
-        }
-
-        setData(safeData)
+        setData(JSON.parse(saved))
       } catch {
         setData(null)
       }
@@ -144,32 +49,45 @@ export default function Dashboard() {
     )
   }
 
-  const result = simulateGrowth(data)
+  // SAFE INPUTS
+  const safeData: VermiData = {
+    income: Number(data.income) || 0,
+    investment: Number(data.investment) || 0,
+    months: data.months ?? 12,
+    reinvestAmount: Number(data.reinvestAmount) || 0,
+    withdrawal: Number(data.withdrawal) || 0,
+  }
+
+  // CORE SIMULATION
+  const result = simulate(safeData)
+
   const analysis = calculateScore(
     result.finalCapital,
-    data.investment,
-    data.months ?? 12,
+    safeData.investment,
+    safeData.months ?? 12,
   )
 
   const insight = generateInsight(
     analysis.score,
     analysis.growth,
-    data.reinvestRate ?? 0.5,
+    0, // reinvestAmount replaced logic, so no % needed
   )
 
-  //Chart data
-  const chartData = result.history.map((value, index) => ({
-    month: index + 1,
-    value: Number.isFinite(value) ? value : 0,
-  }))
+  // DERIVED VALUES
+  const monthlyIncome = safeData.income * 30
 
-  const monthlyIncome = data.income * 30
-  const roi = data.investment > 0 ? result.finalCapital / data.investment : 0
+  const roiPercent =
+    result.totalDeposits > 0
+      ? ((result.finalCapital - result.totalDeposits) / result.totalDeposits) *
+        100
+      : 0
 
-  let message = ''
-  if (analysis.score > 70) message = '🟢 Strong strategy'
-  else if (analysis.score > 40) message = '🟡 Moderate'
-  else message = '🔴 High risk'
+  const message =
+    analysis.score > 70
+      ? '🟢 Strong strategy'
+      : analysis.score > 40
+        ? '🟡 Moderate'
+        : '🔴 High risk'
 
   return (
     <main className='min-h-screen bg-black text-white p-8'>
@@ -182,51 +100,35 @@ export default function Dashboard() {
         Add Data
       </a>
 
+      {/* USER DATA */}
       <div className='bg-zinc-900 p-6 rounded-xl mb-6'>
-        <p>💰 Income: ${data.income}</p>
-        <p>📊 Investment: ${data.investment}</p>
+        <p>💰 Daily Income: ${safeData.income}</p>
+        <p>📊 Investment: ${safeData.investment}</p>
+        <p>💸 Withdrawal: ${safeData.withdrawal}</p>
       </div>
 
-      <div className='bg-black border border-zinc-800 p-6 rounded-xl'>
-        <p>📈 Monthly Income: ${monthlyIncome}</p>
-        <p>📊 ROI: {roi.toFixed(2)}x</p>
+      {/* METRICS */}
+      <div className='bg-black border border-zinc-800 p-6 rounded-xl mb-6'>
+        <p>📈 Monthly Income: ${monthlyIncome.toFixed(2)}</p>
+        <p>📊 ROI: {roiPercent.toFixed(2)}%</p>
         <p>🧠 AI Score: {analysis.score.toFixed(0)} / 100</p>
         <p>{message}</p>
       </div>
-      <div className='bg-zinc-950 border border-zinc-800 p-6 rounded-xl mt-6'>
+
+      {/* CHART */}
+      <div className='bg-zinc-950 border border-zinc-800 p-6 rounded-xl mb-6'>
+        <p className='text-xl font-bold mb-4'>📊 Growth Simulation</p>
+        <Chart history={result.history} />
+      </div>
+
+      {/* AI INSIGHT */}
+      <div className='bg-zinc-950 border border-zinc-800 p-6 rounded-xl'>
         <p className='text-xl font-bold mb-2'>🧠 AI Insight</p>
         <p className='text-gray-300 mb-2'>{insight.message}</p>
         <p className='text-white font-semibold'>{insight.recommendation}</p>
         <span className='text-sm text-gray-500'>
           Risk level: {insight.label}
         </span>
-      </div>
-      <div className='bg-zinc-950 border border-zinc-800 p-6 rounded-xl mt-6'>
-        <p className='text-xl font-bold mb-4'>📊 Growth Simulation</p>
-        <div style={{ width: '100%', height: 300 }}>
-          <ResponsiveContainer>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray='3 3' stroke='#333' />
-              <XAxis dataKey='month' stroke='#888' />
-              <YAxis stroke='#888' />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#111',
-                  border: '1px solid #333',
-                  color: '#fff',
-                }}
-              />
-              <Line
-                type='monotone'
-                dataKey='value'
-                stroke='#22c55e'
-                strokeWidth={2}
-                strokeLinecap='round'
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
       </div>
     </main>
   )
