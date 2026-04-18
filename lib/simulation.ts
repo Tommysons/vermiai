@@ -6,8 +6,13 @@ export type VermiData = {
   withdrawal?: number
 }
 
+export type ChartPoint = {
+  time: string
+  user: number
+  ai: number
+}
 export type SimulationResult = {
-  history: number[]
+  history: ChartPoint[]
   finalCapital: number
   totalDeposits: number
   totalWithdrawals: number
@@ -33,7 +38,7 @@ export function calculateScore(
   return { growth, score }
 }
 
-export function simulate(data: VermiData) {
+export function simulate(data: VermiData): SimulationResult {
   const months = data.months ?? 12
 
   const income = Number(data.income) || 0
@@ -43,48 +48,75 @@ export function simulate(data: VermiData) {
 
   const monthlyIncome = income * 30
 
-  let capital = investment
-  let totalDeposits = investment
+  // 👇 TWO SYSTEMS
+  let userCapital = investment
+  let aiCapital = investment
 
-  const history: number[] = [capital]
+  const totalDeposits = investment
+  let totalWithdrawals = 0
+
+  const history: ChartPoint[] = []
 
   for (let i = 0; i < months; i++) {
-    // 1. income comes in
-    const cashflow = monthlyIncome
+    // =========================
+    // 👤 USER STRATEGY
+    // =========================
+    const userCashflow = monthlyIncome
+    const userInterest = userCapital * 0.01
+    const userProfit = userCashflow + userInterest
 
-    // 2. capital earns small growth (optional engine)
-    const interest = capital * 0.01
+    const userReinvested = Math.min(userProfit, reinvestAmount)
+    const userWithdrawable = userProfit - userReinvested
+    const userWithdrawal = Math.min(withdrawal, userWithdrawable)
 
-    // 3. total earnings
-    const profit = cashflow + interest
+    userCapital += userReinvested
+    userCapital -= userWithdrawal
 
-    // 4. reinvest limited amount
-    const reinvested = Math.min(profit, reinvestAmount)
+    // =========================
+    // 🤖 AI STRATEGY (smarter)
+    // =========================
+    const aiCashflow = monthlyIncome
+    const aiInterest = aiCapital * 0.015 // slightly better compounding
+    const aiProfit = aiCashflow + aiInterest
 
-    // 5. APPLY WITHDRAWAL (IMPORTANT FIX)
-    const netWithdrawal = withdrawal
+    const aiReinvested = aiProfit * 0.8 // AI reinvests more efficiently
+    const aiWithdrawal = aiProfit * 0.1 // AI keeps growth focus
 
-    // 6. update capital
-    capital += reinvested
-    capital -= netWithdrawal
+    aiCapital += aiReinvested
+    aiCapital -= aiWithdrawal
 
-    // 7. track deposits
-    totalDeposits += cashflow
+    // =========================
+    // SAFETY
+    // =========================
+    if (userCapital < 0) userCapital = 0
+    if (aiCapital < 0) aiCapital = 0
 
-    // 8. prevent negative crash
-    if (capital < 0) capital = 0
+    totalWithdrawals += userWithdrawal + aiWithdrawal
 
-    history.push(capital)
+    // =========================
+    // HISTORY
+    // =========================
+    history.push({
+      time: `Month ${i}`,
+      user: userCapital,
+      ai: aiCapital,
+    })
   }
 
-  const totalProfit = capital - totalDeposits
-  const roi = totalDeposits > 0 ? capital / totalDeposits : 0
-  const score = Math.min(100, Math.max(0, (roi - 1) * 100))
+  const finalCapital = Math.max(userCapital, aiCapital)
+
+  const totalProfit = finalCapital + totalWithdrawals - totalDeposits
+
+  const roi =
+    totalDeposits > 0 ? (finalCapital - totalDeposits) / totalDeposits : 0
+
+  const { score } = calculateScore(finalCapital, investment, months)
 
   return {
     history,
-    finalCapital: capital,
+    finalCapital,
     totalDeposits,
+    totalWithdrawals,
     totalProfit,
     roi,
     score,

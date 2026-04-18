@@ -89,6 +89,10 @@ export default function Dashboard() {
         ? '🟡 Moderate'
         : '🔴 High risk'
 
+  //History
+  const userHistory = result.history.map((h) => h.user)
+  const aiHistory = result.history.map((h) => h.ai)
+
   return (
     <main className='min-h-screen bg-black text-white p-8'>
       <h1 className='text-3xl font-bold mb-6'>Dashboard</h1>
@@ -118,7 +122,7 @@ export default function Dashboard() {
       {/* CHART */}
       <div className='bg-zinc-950 border border-zinc-800 p-6 rounded-xl mb-6'>
         <p className='text-xl font-bold mb-4'>📊 Growth Simulation</p>
-        <Chart history={result.history} />
+        <Chart userHistory={userHistory} aiHistory={aiHistory} />
       </div>
 
       {/* AI INSIGHT */}
