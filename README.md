@@ -1,3 +1,7 @@
-### simulateEngine.ts
+### updated types.ts
 
-Has the formula - needs to be tested. -
+### updated aiAdvisor.ts
+
+### need to work on earning list
+
+### need to work on formula with dynamic APR

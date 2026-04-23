@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { addEarning } from '@/lib/data/earnings'
 import { EarningSource } from '@/lib/data/types'
 
-export default function EarningsForm() {
+export default function EarningsForm({ onAdd }: { onAdd?: () => void }) {
   const [amount, setAmount] = useState('')
   const [source, setSource] = useState<EarningSource>('gomining')
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -32,6 +32,9 @@ export default function EarningsForm() {
 
     // reset form
     setAmount('')
+
+    //trigger dashboard update
+    onAdd?.()
   }
 
   return (
