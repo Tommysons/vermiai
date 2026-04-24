@@ -3,30 +3,74 @@ export type Investment = {
   amount: number
 }
 
-let investments: Investment[] = [
-  { coin: 'BTC', amount: 1000 },
-  { coin: 'USDC', amount: 1000 },
-]
+const STORAGE_KEY = 'vermi_investments'
 
-//GET
-export function getInvestments(): Investment[] {
-  return investments
+// --------------------
+// LOAD
+// --------------------
+function load(): Investment[] {
+  if (typeof window === 'undefined') return []
+
+  const data = localStorage.getItem(STORAGE_KEY)
+  return data ? JSON.parse(data) : []
 }
 
-//ADD
+// --------------------
+// SAVE
+// --------------------
+function save(data: Investment[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+}
+
+// --------------------
+// GET
+// --------------------
+export function getInvestments(): Investment[] {
+  return load()
+}
+
+// --------------------
+// ADD
+// --------------------
 export function addInvestment(inv: Investment) {
-  const existing = investments.find(
+  const current = load()
+
+  const existing = current.find(
     (i) => i.coin.toUpperCase() === inv.coin.toUpperCase(),
   )
 
   if (existing) {
     existing.amount += inv.amount
   } else {
-    investments.push(inv)
+    current.push(inv)
   }
+
+  save(current)
 }
 
-//Reset
+//remove
+
+export function removeInvestment(coin: string, amount: number) {
+  const current = load()
+
+  const existing = current.find(
+    (i) => i.coin.toUpperCase() === coin.toUpperCase(),
+  )
+
+  if (!existing) return
+  existing.amount -= amount
+
+  if (existing.amount <= 0) {
+    const index = current.indexOf(existing)
+    current.splice(index, 1)
+  }
+
+  save(current)
+}
+
+// --------------------
+// RESET
+// --------------------
 export function resetInvestments() {
-  investments = []
+  save([])
 }

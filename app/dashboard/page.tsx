@@ -1,88 +1,110 @@
 'use client'
 
 import { useState } from 'react'
-import { getInvestmentReport } from '@/lib/simulation/investmentEngine'
-import { addInvestment } from '@/lib/data/investments'
+
+import { seedTransactions, getTransactions } from '@/lib/data/transactions'
+import type { Transaction } from '@/lib/data/transactions'
+
+import { buildPortfolio } from '@/lib/simulation/portfolioEngine'
+import type { Investment } from '@/lib/data/investments'
+
+import { getAIAdviceV2 } from '@/lib/simulation/aiAdvisorV2'
+import type { AIResult } from '@/lib/simulation/aiAdvisorV2'
+
+import { runAIExecution } from '@/lib/simulation/executionEngine'
 
 export default function Dashboard() {
-  const [coin, setCoin] = useState('')
-  const [amount, setAmount] = useState('')
+  // -----------------------------
+  // STATE (fully typed)
+  // -----------------------------
+  const [portfolio, setPortfolio] = useState<Investment[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [ai, setAi] = useState<AIResult | null>(null)
 
-  const report = getInvestmentReport()
+  const [execution, setExecution] = useState<{
+    executed: boolean
+    action?: string
+    from?: string
+    to?: string
+    amount?: number
+    reason?: string
+  } | null>(null)
 
-  function handleAdd() {
-    if (!coin || !amount) return
-
-    addInvestment({
-      coin: coin.toUpperCase(),
-      amount: Number(amount),
-    })
-
-    setCoin('')
-    setAmount('')
+  // -----------------------------
+  // REFRESH DATA
+  // -----------------------------
+  const refresh = () => {
+    setPortfolio(buildPortfolio())
+    setTransactions(getTransactions())
   }
 
+  // -----------------------------
+  // UI
+  // -----------------------------
   return (
-    <div className='p-6 space-y-6'>
+    <div className='p-6 space-y-4'>
       <h1 className='text-2xl font-bold'>VermiAI Dashboard</h1>
 
-      {/*Input Section*/}
-      <div className='flex gap-2'>
-        <input
-          placeholder='Coin (BTC)'
-          value={coin}
-          onChange={(e) => setCoin(e.target.value)}
-          className='p-2 border rounded'
-        />
-        <input
-          placeholder='Amount'
-          type='number'
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className='p-2 border rounded'
-        />
+      {/* ---------------- BUTTONS ---------------- */}
+      <div className='flex gap-2 flex-wrap'>
+        <button
+          className='px-4 py-2 border rounded'
+          onClick={() => {
+            seedTransactions()
+            refresh()
+          }}
+        >
+          Seed Data
+        </button>
 
         <button
-          onClick={handleAdd}
-          className='bg-black text-white px-4 rounded'
+          className='px-4 py-2 border rounded'
+          onClick={() => {
+            const result = getAIAdviceV2()
+            setAi(result)
+          }}
         >
-          Add
+          Run AI
+        </button>
+
+        <button
+          className='px-4 py-2 border rounded'
+          onClick={() => {
+            const result = runAIExecution()
+            setExecution(result)
+            refresh()
+          }}
+        >
+          Execute AI
+        </button>
+
+        <button className='px-4 py-2 border rounded' onClick={refresh}>
+          Refresh
         </button>
       </div>
 
-      {/*Per coin breakdown*/}
-      <div className='space-y-3'>
-        {report.breakdown.map((item) => (
-          <div
-            key={item.coin}
-            className='flex justify-between p-3 border rounded-xl'
-          >
-            <div>
-              <p className='font-semibold'>{item.coin}</p>
-              <p className='text-sm text-gray-500'> APR: {item.apr}%</p>
-            </div>
-            <div className='text-right'>
-              <p>${item.dailyIncome.toFixed(2)} / day</p>
-              <p>${item.monthlyIncome.toFixed(2)} / month</p>
-            </div>
-          </div>
-        ))}
+      {/* ---------------- PORTFOLIO ---------------- */}
+      <div className='border p-3 rounded'>
+        <h2 className='font-bold'>Portfolio</h2>
+        <pre>{JSON.stringify(portfolio, null, 2)}</pre>
       </div>
-      {/*Total Stats*/}
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4 pt-4'>
-        <div className='p-4 border rounded-xl'>
-          <h2 className='text-sm text-gray-500'>Total Daily Income</h2>
-          <p className='text-xl font-semibold'>
-            ${report.totalDaily.toFixed(2)}
-          </p>
-        </div>
 
-        <div className='p-4 border rounded-xl'>
-          <h2 className='text-sm text-gray-500'>Total Monthly Income</h2>
-          <p className='text-xl font-semibold'>
-            ${report.totalMonthly.toFixed(2)}
-          </p>
-        </div>
+      {/* ---------------- TRANSACTIONS ---------------- */}
+      <div className='border p-3 rounded'>
+        <h2 className='font-bold'>Transactions</h2>
+        <pre>{JSON.stringify(transactions, null, 2)}</pre>
+      </div>
+
+      {/* ---------------- AI ---------------- */}
+      <div className='border p-3 rounded'>
+        <h2 className='font-bold'>AI Decision</h2>
+        <pre>{JSON.stringify(ai, null, 2)}</pre>
+      </div>
+
+      {/* ---------------- EXECUTION ---------------- */}
+      <div className='border p-3 rounded'>
+        <h2 className='font-bold'>Execution</h2>
+        <pre>{JSON.stringify(execution, null, 2)}</pre>
       </div>
     </div>
   )
