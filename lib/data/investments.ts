@@ -15,7 +15,9 @@ export function getInvestments(): Investment[] {
 
 //ADD
 export function addInvestment(inv: Investment) {
-  const existing = investments.find((i) => i.coin === inv.coin)
+  const existing = investments.find(
+    (i) => i.coin.toUpperCase() === inv.coin.toUpperCase(),
+  )
 
   if (existing) {
     existing.amount += inv.amount

@@ -4,4 +4,4 @@
 
 ### need to work on earning list
 
-### need to work on formula with dynamic APR
+### need to work on formula with dynamic APR - formula has been improved

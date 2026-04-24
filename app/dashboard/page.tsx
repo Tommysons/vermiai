@@ -1,13 +1,54 @@
 'use client'
 
+import { useState } from 'react'
 import { getInvestmentReport } from '@/lib/simulation/investmentEngine'
+import { addInvestment } from '@/lib/data/investments'
 
 export default function Dashboard() {
+  const [coin, setCoin] = useState('')
+  const [amount, setAmount] = useState('')
+
   const report = getInvestmentReport()
+
+  function handleAdd() {
+    if (!coin || !amount) return
+
+    addInvestment({
+      coin: coin.toUpperCase(),
+      amount: Number(amount),
+    })
+
+    setCoin('')
+    setAmount('')
+  }
 
   return (
     <div className='p-6 space-y-6'>
       <h1 className='text-2xl font-bold'>VermiAI Dashboard</h1>
+
+      {/*Input Section*/}
+      <div className='flex gap-2'>
+        <input
+          placeholder='Coin (BTC)'
+          value={coin}
+          onChange={(e) => setCoin(e.target.value)}
+          className='p-2 border rounded'
+        />
+        <input
+          placeholder='Amount'
+          type='number'
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className='p-2 border rounded'
+        />
+
+        <button
+          onClick={handleAdd}
+          className='bg-black text-white px-4 rounded'
+        >
+          Add
+        </button>
+      </div>
 
       {/*Per coin breakdown*/}
       <div className='space-y-3'>
