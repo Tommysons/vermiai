@@ -1,3 +1,6 @@
+// -----------------------------
+// TYPES
+// -----------------------------
 export type Transaction =
   | {
       id: string
@@ -22,8 +25,25 @@ export type Transaction =
       date: string
     }
 
+// input type (NO id)
+type Base = {
+  amount: number
+  date: string
+}
+
+export type NewTransaction =
+  | ({ type: 'buy'; coin: string } & Base)
+  | ({ type: 'earn'; coin: string } & Base)
+  | ({ type: 'swap'; from: string; to: string } & Base)
+
+// -----------------------------
+// STORAGE KEY
+// -----------------------------
 const STORAGE_KEY = 'vermi_transactions'
 
+// -----------------------------
+// LOAD
+// -----------------------------
 function load(): Transaction[] {
   if (typeof window === 'undefined') return []
 
@@ -31,31 +51,45 @@ function load(): Transaction[] {
   return data ? (JSON.parse(data) as Transaction[]) : []
 }
 
+// -----------------------------
+// SAVE
+// -----------------------------
 function save(data: Transaction[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 
+// -----------------------------
+// GET
+// -----------------------------
 export function getTransactions(): Transaction[] {
   return load()
 }
 
-// IMPORTANT: MUST be explicit per type
-export function addTransaction(tx: Omit<Transaction, 'id'>) {
+// -----------------------------
+// ADD
+// -----------------------------
+export function addTransaction(tx: NewTransaction) {
   const current = load()
 
   const newTx: Transaction = {
     ...tx,
     id: crypto.randomUUID(),
-  } as Transaction
+  }
 
   current.push(newTx)
   save(current)
 }
 
+// -----------------------------
+// RESET
+// -----------------------------
 export function resetTransactions() {
   save([])
 }
 
+// -----------------------------
+// SEED (DEV TEST DATA)
+// -----------------------------
 export function seedTransactions() {
   save([
     {
@@ -63,6 +97,13 @@ export function seedTransactions() {
       type: 'buy',
       coin: 'USDC',
       amount: 1000,
+      date: new Date().toISOString(),
+    },
+    {
+      id: crypto.randomUUID(),
+      type: 'buy',
+      coin: 'BTC',
+      amount: 500,
       date: new Date().toISOString(),
     },
     {
@@ -76,7 +117,7 @@ export function seedTransactions() {
       id: crypto.randomUUID(),
       type: 'swap',
       from: 'USDC',
-      to: 'BTC',
+      to: 'ETH',
       amount: 200,
       date: new Date().toISOString(),
     },

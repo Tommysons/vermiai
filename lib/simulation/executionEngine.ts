@@ -2,10 +2,27 @@ import { getAIAdviceV2 } from './aiAdvisorV2'
 import { buildPortfolio } from './portfolioEngine'
 import { addTransaction } from '../data/transactions'
 
-export function runAIExecution() {
+export type ExecutionResult =
+  | {
+      executed: true
+      action: 'swap'
+      from: string
+      to: string
+      amount: number
+    }
+  | {
+      executed: false
+      action: string
+      reason: string
+    }
+
+export function runAIExecution(): ExecutionResult {
   const ai = getAIAdviceV2()
   const portfolio = buildPortfolio()
 
+  // -----------------------------
+  // SWAP LOGIC
+  // -----------------------------
   if (ai.action === 'swap' && ai.fromCoin && ai.toCoin) {
     const fromCoin = ai.fromCoin
     const toCoin = ai.toCoin
@@ -15,13 +32,22 @@ export function runAIExecution() {
     )
 
     if (!from || from.amount <= 0) {
-      return { executed: false, reason: 'Invalid source coin or amount' }
+      return {
+        executed: false,
+        action: ai.action,
+        reason: 'Invalid source coin or amount',
+      }
     }
 
-    const amount = from.amount
+    // 🔥 stability: only partial swap
+    const SWAP_RATIO = 0.4
+    const amount = from.amount * SWAP_RATIO
+
     const now = new Date().toISOString()
 
-    //write transaction instead of modifying state
+    // -----------------------------
+    // WRITE EVENT (source of truth)
+    // -----------------------------
     addTransaction({
       type: 'swap',
       from: fromCoin,
@@ -32,13 +58,16 @@ export function runAIExecution() {
 
     return {
       executed: true,
-      action: ai.action,
+      action: 'swap',
       from: fromCoin,
       to: toCoin,
       amount,
     }
   }
 
+  // -----------------------------
+  // NO ACTION
+  // -----------------------------
   return {
     executed: false,
     action: ai.action,
