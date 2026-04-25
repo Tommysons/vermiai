@@ -1,6 +1,10 @@
 import { getAIAdviceV2 } from './aiAdvisorV2'
+import type { AIResult } from './aiAdvisorV2'
+
 import { buildPortfolio } from './portfolioEngine'
 import { addTransaction } from '../data/transactions'
+import { recordTrade } from './aiMemoryEngine'
+import { getMarket } from './marketEngine'
 
 export type ExecutionResult =
   | {
@@ -16,9 +20,40 @@ export type ExecutionResult =
       reason: string
     }
 
+// -----------------------------
+// ANTI-SPAM MEMORY
+// -----------------------------
+let lastActionKey: string | null = null
+let lastTick = 0
+
+function getActionKey(ai: AIResult) {
+  return `${ai.action}-${ai.fromCoin ?? ''}-${ai.toCoin ?? ''}`
+}
+
+// -----------------------------
+// EXECUTION ENGINE
+// -----------------------------
 export function runAIExecution(): ExecutionResult {
-  const ai = getAIAdviceV2()
+  const ai: AIResult = getAIAdviceV2()
   const portfolio = buildPortfolio()
+  const market = getMarket()
+
+  const actionKey = getActionKey(ai)
+  const now = Date.now()
+
+  // -----------------------------
+  // COOLDOWN (ANTI-SPAM)
+  // -----------------------------
+  if (lastActionKey === actionKey && now - lastTick < 120000) {
+    return {
+      executed: false,
+      action: ai.action,
+      reason: 'Cooldown active',
+    }
+  }
+
+  lastActionKey = actionKey
+  lastTick = now
 
   // -----------------------------
   // SWAP LOGIC
@@ -39,21 +74,36 @@ export function runAIExecution(): ExecutionResult {
       }
     }
 
-    // 🔥 stability: only partial swap
-    const SWAP_RATIO = 0.4
+    // only partial swap (stability)
+    const SWAP_RATIO = 0.25
     const amount = from.amount * SWAP_RATIO
 
-    const now = new Date().toISOString()
+    // entry price locked at execution time
+    const entryPrice = typeof market[toCoin] === 'number' ? market[toCoin] : 1
+
+    const tradeId = crypto.randomUUID()
 
     // -----------------------------
-    // WRITE EVENT (source of truth)
+    // TRANSACTION (source of truth)
     // -----------------------------
     addTransaction({
       type: 'swap',
       from: fromCoin,
       to: toCoin,
       amount,
-      date: now,
+      date: new Date().toISOString(),
+    })
+
+    // -----------------------------
+    // MEMORY (PnL SYSTEM INPUT)
+    // -----------------------------
+    recordTrade({
+      id: tradeId,
+      coin: toCoin,
+      action: 'swap',
+      amount,
+      entryPrice,
+      timestamp: Date.now(),
     })
 
     return {

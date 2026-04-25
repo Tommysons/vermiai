@@ -1,7 +1,7 @@
 import { random } from './randomEngine'
 import { marketState } from './marketState'
 import { maybeTriggerNews } from './newsEngine'
-import { getCoinProfile } from './coinProfile'
+import { updateRiskState } from './dynamicRiskEngine'
 
 type MarketState = Record<string, number>
 
@@ -44,10 +44,10 @@ export function getMarket(): MarketState {
 }
 
 // -----------------------------
-// SAFE PRICE LIMITS (prevents chaos)
+// PRICE SAFETY (optional but smart)
 // -----------------------------
 function clampPrice(coin: string, price: number): number {
-  if (coin === 'USDC') return 1 // stablecoin lock
+  if (coin === 'USDC') return 1
 
   const min = 0.01
   const max = 1_000_000
@@ -56,78 +56,113 @@ function clampPrice(coin: string, price: number): number {
 }
 
 // -----------------------------
-// SIMULATE 1 DAY (WITH REAL CYCLES)
+// COIN VOLATILITY PROFILE
+// -----------------------------
+function getCoinVolatility(coin: string): number {
+  switch (coin) {
+    case 'BTC':
+      return 0.02
+    case 'ETH':
+      return 0.03
+    case 'BNB':
+      return 0.035
+    case 'SOL':
+      return 0.06
+    case 'TON':
+      return 0.07
+    case 'USDC':
+      return 0.001
+    default:
+      return 0.05
+  }
+}
+
+// -----------------------------
+// SIMULATE 1 DAY
 // -----------------------------
 export function simulateMarketDay(): MarketState {
   const market = load()
 
   const { cycle, volatility } = marketState
 
-  // -----------------------------
-  // NEWS EVENT
-  // -----------------------------
   const news = maybeTriggerNews()
 
   const updated: MarketState = {}
+  const riskUpdates: Record<string, number> = {}
 
   for (const coin in market) {
     const price = market[coin]
 
-    const profile = getCoinProfile(coin)
-
     // -----------------------------
-    // BASE TREND (cycle-based)
+    // MARKET TREND (cycle)
     // -----------------------------
     let trend = 0
 
     switch (cycle) {
       case 'bull':
-        trend = 0.0015
+        trend = 0.002
         break
       case 'bear':
-        trend = -0.0018
+        trend = -0.0025
         break
       case 'crash':
         trend = -0.01
         break
       case 'recovery':
-        trend = 0.003
+        trend = 0.004
         break
     }
 
-    trend *= profile.baseTrendStrength
+    // -----------------------------
+    // COIN VOLATILITY
+    // -----------------------------
+    const coinVolatility = getCoinVolatility(coin)
 
     // -----------------------------
-    // NEWS IMPACT (coin-specific)
+    // NEWS IMPACT
     // -----------------------------
     let newsImpact = 0
     let newsVolatility = 0
 
     if (news) {
-      const affectsCoin =
-        !news.affectedCoins || news.affectedCoins.includes(coin)
+      const affects = !news.affectedCoins || news.affectedCoins.includes(coin)
 
-      if (affectsCoin) {
-        newsImpact = news.impact * profile.newsSensitivity
-        newsVolatility = news.volatilityBoost * profile.newsSensitivity
+      if (affects) {
+        newsImpact = news.impact
+        newsVolatility = news.volatilityBoost
       }
     }
 
     // -----------------------------
-    // RANDOM VOLATILITY (coin-specific)
+    // FINAL CHANGE
     // -----------------------------
     const noise =
-      (random() - 0.5) * (volatility + profile.volatility + newsVolatility)
+      (random() - 0.5) * (volatility + coinVolatility + newsVolatility)
 
-    // -----------------------------
-    // FINAL PRICE CHANGE
-    // -----------------------------
     const change = trend + noise + newsImpact
 
+    // -----------------------------
+    // APPLY PRICE
+    // -----------------------------
     const newPrice = price * (1 + change)
 
-    updated[coin] = +clampPrice(coin, newPrice).toFixed(2)
+    const safePrice = clampPrice(coin, newPrice)
+
+    updated[coin] = +safePrice.toFixed(2)
+
+    // -----------------------------
+    // 🔥 RISK SIGNAL (CRITICAL)
+    // -----------------------------
+    const volatilitySignal = Math.abs(change)
+    const randomness = random() * 0.1
+
+    riskUpdates[coin] = Math.min(1, volatilitySignal + randomness)
   }
+
+  // -----------------------------
+  // 🔥 UPDATE RISK SYSTEM
+  // -----------------------------
+  updateRiskState(riskUpdates)
 
   save(updated)
   return updated

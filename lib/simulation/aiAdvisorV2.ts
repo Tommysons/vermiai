@@ -1,6 +1,7 @@
 import { buildPortfolio } from './portfolioEngine'
 import { getAPR } from '../data/apr'
-import { getRiskPenalty, getRiskLevel } from './riskEngine'
+import { getRiskState } from './dynamicRiskEngine'
+import { getCoinPerformance } from './aiMemoryEngine'
 
 type Advice = 'hold' | 'increase' | 'decrease' | 'swap'
 
@@ -12,12 +13,35 @@ export type AIResult = {
   confidence: number
 }
 
+// -----------------------------
+// helper: normalize risk penalty
+// -----------------------------
+function riskPenalty(score: number): number {
+  // 0 = safe → 0 penalty
+  // 1 = extreme → heavy penalty
+  return score
+}
+
+// -----------------------------
+// helper: memory boost/penalty
+// -----------------------------
+function memoryModifier(coin: string): number {
+  const perf = getCoinPerformance(coin)
+
+  if (perf > 0.7) return 1.15 // strong winner
+  if (perf > 0.5) return 1.05
+  if (perf < 0.3) return 0.85 // bad performer
+
+  return 1
+}
+
+// -----------------------------
+// MAIN AI
+// -----------------------------
 export function getAIAdviceV2(): AIResult {
   const portfolio = buildPortfolio()
+  const riskState = getRiskState()
 
-  // -----------------------------
-  // EDGE CASES
-  // -----------------------------
   if (portfolio.length === 0) {
     return {
       action: 'hold',
@@ -35,64 +59,59 @@ export function getAIAdviceV2(): AIResult {
   }
 
   // -----------------------------
-  // ENRICH PORTFOLIO WITH RISK + RETURNS
+  // enrich coins
   // -----------------------------
   const enriched = portfolio.map((p) => {
     const apr = getAPR(p.coin)
-    const riskPenalty = getRiskPenalty(p.coin)
-    const riskLevel = getRiskLevel(p.coin)
 
-    const monthlyIncome = ((p.amount * apr) / 100 / 12) * (1 - riskPenalty)
+    const risk = riskState[p.coin]?.riskScore ?? 0.5
+
+    const memory = memoryModifier(p.coin)
+
+    const adjustedAPR = apr * memory * (1 - riskPenalty(risk))
+
+    const monthlyIncome = (p.amount * adjustedAPR) / 100 / 12
 
     return {
       ...p,
       apr,
+      risk,
+      memory,
       monthlyIncome,
-      riskPenalty,
-      riskLevel,
     }
   })
 
   // -----------------------------
-  // RISK-WEIGHTED SCORING
+  // sort performance
   // -----------------------------
-  const scored = enriched.map((p) => {
-    const riskWeight =
-      p.riskLevel === 'high'
-        ? 0.6
-        : p.riskLevel === 'medium'
-          ? 0.8
-          : p.riskLevel === 'low'
-            ? 1
-            : 1.1 // stable / safe assets
-
-    const score = p.monthlyIncome * riskWeight
-
-    return { ...p, score }
-  })
-
-  const sorted = [...scored].sort((a, b) => b.score - a.score)
+  const sorted = [...enriched].sort((a, b) => b.monthlyIncome - a.monthlyIncome)
 
   const best = sorted[0]
   const worst = sorted[sorted.length - 1]
 
-  // -----------------------------
-  // AVERAGE SCORE
-  // -----------------------------
-  const avg = sorted.reduce((sum, c) => sum + c.score, 0) / sorted.length
+  const avg =
+    sorted.reduce((sum, c) => sum + c.monthlyIncome, 0) / sorted.length
 
-  const bestRatio = best.score / avg
-  const worstRatio = worst.score / avg
+  const bestRatio = best.monthlyIncome / avg
+  const worstRatio = worst.monthlyIncome / avg
 
   // -----------------------------
-  // SWAP LOGIC (risk-aware)
+  // SAFETY FILTER (IMPORTANT FIX)
+  // prevent swapping into bad coins repeatedly
   // -----------------------------
-  if (bestRatio > 1.25 && worstRatio < 0.85 && best.riskLevel !== 'high') {
+  const isBadCoin = worst.risk > 0.75 || worst.memory < 0.8
+
+  const isBestSafe = best.risk < 0.7
+
+  // -----------------------------
+  // SWAP LOGIC (STABILIZED)
+  // -----------------------------
+  if (bestRatio > 1.25 && worstRatio < 0.85 && isBestSafe && !isBadCoin) {
     return {
       action: 'swap',
       fromCoin: worst.coin,
       toCoin: best.coin,
-      reason: `${best.coin} risk-adjusted outperforms ${worst.coin}`,
+      reason: `${best.coin} outperforming ${worst.coin} (risk + memory adjusted)`,
       confidence: 0.8,
     }
   }
@@ -100,21 +119,21 @@ export function getAIAdviceV2(): AIResult {
   // -----------------------------
   // DECREASE LOGIC
   // -----------------------------
-  if (worstRatio < 0.9 || worst.riskLevel === 'high') {
+  if (worstRatio < 0.9 || worst.risk > 0.8) {
     return {
       action: 'decrease',
       fromCoin: worst.coin,
-      reason: `${worst.coin} is too risky or underperforming`,
+      reason: `${worst.coin} is underperforming or too risky`,
       confidence: 0.7,
     }
   }
 
   // -----------------------------
-  // DEFAULT
+  // HOLD
   // -----------------------------
   return {
     action: 'hold',
-    reason: 'Portfolio is balanced',
-    confidence: 0.6,
+    reason: 'Portfolio is stable under risk + memory evaluation',
+    confidence: 0.65,
   }
 }

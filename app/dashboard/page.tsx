@@ -14,6 +14,9 @@ import type { AIResult } from '@/lib/simulation/aiAdvisorV2'
 import { runAIExecution } from '@/lib/simulation/executionEngine'
 import { runSimulation } from '@/lib/simulation/timeEngine'
 
+import { getOpenTrades } from '@/lib/simulation/tradeLifecycle'
+import type { Trade } from '@/lib/simulation/tradeLifecycle'
+
 // -----------------------------
 // TYPES
 // -----------------------------
@@ -41,6 +44,7 @@ type SimulationDay = {
 export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<Investment[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [trades, setTrades] = useState<Trade[]>([]) // ✅ FIXED
   const [ai, setAi] = useState<AIResult | null>(null)
   const [execution, setExecution] = useState<ExecutionResult | null>(null)
   const [simulation, setSimulation] = useState<SimulationDay[]>([])
@@ -51,6 +55,7 @@ export default function Dashboard() {
   const refresh = () => {
     setPortfolio(buildPortfolio())
     setTransactions(getTransactions())
+    setTrades(getOpenTrades())
   }
 
   // -----------------------------
@@ -98,6 +103,7 @@ export default function Dashboard() {
           onClick={() => {
             const result = runSimulation(7)
             setSimulation(result)
+            refresh()
           }}
         >
           Run 7-day Simulation
@@ -118,6 +124,28 @@ export default function Dashboard() {
       <div className='border p-3 rounded'>
         <h2 className='font-bold mb-2'>Transactions</h2>
         <pre>{JSON.stringify(transactions, null, 2)}</pre>
+      </div>
+
+      {/* ---------------- OPEN TRADES ---------------- */}
+      <div className='border p-3 rounded'>
+        <h2 className='font-bold mb-2'>Open Trades</h2>
+
+        {trades.length === 0 ? (
+          <p className='text-gray-500'>No open trades</p>
+        ) : (
+          <div className='space-y-2'>
+            {trades.map((t) => (
+              <div key={t.id} className='border p-2 rounded'>
+                <p>
+                  <b>{t.coin}</b> — {t.amount}
+                </p>
+                <p>Entry Price: ${t.entryPrice}</p>
+                <p>Status: {t.status}</p>
+                <p>Opened: {new Date(t.openedAt).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ---------------- AI ---------------- */}
