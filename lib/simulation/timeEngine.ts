@@ -1,9 +1,10 @@
-import { setSeed } from './randomEngine'
-import { simulateMarketDay } from './marketEngine'
+import { setSeed, nextTick } from './randomEngine'
+import { tickMarket } from './marketEngine'
 import { getAIAdviceV2 } from './aiAdvisorV2'
 import { runAIExecution } from './executionEngine'
 import { buildPortfolio } from './portfolioEngine'
 import { getPortfolioValue } from './valueEngine'
+import { maybeTriggerNews } from './newsEngine'
 
 export type SimulationDay = {
   day: number
@@ -34,7 +35,9 @@ export function runSimulation(
   // -----------------------------
   for (let day = 1; day <= days; day++) {
     // Market evolves deterministically
-    simulateMarketDay()
+    nextTick()
+    tickMarket()
+    maybeTriggerNews()
 
     // AI decision based on current state
     const ai = getAIAdviceV2()

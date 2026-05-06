@@ -1,15 +1,23 @@
-let seed = 123456
+// randomEngine.ts
+
+let seed = 1
+let tick = 0
 
 export function setSeed(newSeed: number) {
   seed = newSeed
+  tick = 0
 }
 
-export function getSeed() {
-  return seed
+export function nextTick() {
+  tick++
 }
 
-//simple deterministic pseudo-random generator
-export function random() {
-  seed = (seed * 166425 + 1013904223) % 429467296
-  return seed / 429467296
+export function getTick() {
+  return tick
+}
+
+export function random(): number {
+  // LCG (Linear Congruential Generator)
+  seed = (seed * 1664525 + 1013904223) % 4294967296
+  return seed / 4294967296
 }
