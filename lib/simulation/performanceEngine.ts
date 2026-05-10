@@ -1,111 +1,96 @@
 import { getMemoryState } from './aiMemoryEngine'
 
-// -----------------------------
-// TYPES
-// -----------------------------
-export type PerformanceReport = {
-  totalPnL: number
-  winRate: number
-  avgWin: number
-  avgLoss: number
-  sharpe: number
-  maxDrawdown: number
-  trades: number
+type Trade = {
+  coin: string
+  entryPrice: number
+  exitPrice?: number
+  amount: number
 }
 
 // -----------------------------
-// GET CLOSED TRADES
+// TRADES WITH PnL
 // -----------------------------
-function getClosedTrades() {
-  return getMemoryState().history.filter(
-    (t) => t.pnl !== undefined && t.exitPrice !== undefined,
-  )
+function getTrades(): (Trade & { pnl: number })[] {
+  const memory = getMemoryState()
+
+  return memory.trades.map((t) => {
+    const exit = t.exitPrice ?? t.entryPrice
+    const pnl = (exit - t.entryPrice) / t.entryPrice
+
+    return { ...t, pnl }
+  })
 }
 
 // -----------------------------
-// MAIN CALCULATION
+export function getTotalPnL() {
+  const trades = getTrades()
+  return trades.reduce((s, t) => s + t.pnl, 0)
+}
+
 // -----------------------------
-export function getPerformanceReport(): PerformanceReport {
-  const trades = getClosedTrades()
+export function getWinRate() {
+  const trades = getTrades()
+  if (!trades.length) return 0
 
-  if (trades.length === 0) {
-    return {
-      totalPnL: 0,
-      winRate: 0,
-      avgWin: 0,
-      avgLoss: 0,
-      sharpe: 0,
-      maxDrawdown: 0,
-      trades: 0,
-    }
-  }
+  return trades.filter((t) => t.pnl > 0).length / trades.length
+}
 
-  let totalPnL = 0
-  const wins: number[] = []
-  const losses: number[] = []
-  const equity: number[] = []
-  let running = 0
+// -----------------------------
+export function getSharpeRatio() {
+  const trades = getTrades()
+  if (!trades.length) return 0
+
+  const r = trades.map((t) => t.pnl)
+  const avg = r.reduce((a, b) => a + b, 0) / r.length
+  const variance = r.reduce((a, v) => a + (v - avg) ** 2, 0) / r.length
+
+  return variance === 0 ? 0 : avg / Math.sqrt(variance)
+}
+
+// -----------------------------
+// REAL EQUITY CURVE
+// -----------------------------
+export function getEquityCurve() {
+  const trades = getTrades()
+
+  let equity = 1
+
+  return trades.map((t) => {
+    equity = equity * (1 + t.pnl)
+    return equity
+  })
+}
+
+// -----------------------------
+export function getDrawdownCurve() {
+  const equity = getEquityCurve()
+
   let peak = 0
-  let maxDrawdown = 0
 
-  // -----------------------------
-  // PROCESS TRADES
-  // -----------------------------
-  for (const t of trades) {
-    const pnl = t.pnl ?? 0
-    totalPnL += pnl
+  return equity.map((v) => {
+    if (v > peak) peak = v
+    return peak - v
+  })
+}
 
-    running += pnl
-    equity.push(running)
+// -----------------------------
+export function getPerformanceReport() {
+  const trades = getTrades()
 
-    if (running > peak) peak = running
+  const wins = trades.filter((t) => t.pnl > 0)
+  const losses = trades.filter((t) => t.pnl <= 0)
 
-    const drawdown = peak - running
-    if (drawdown > maxDrawdown) {
-      maxDrawdown = drawdown
-    }
-
-    if (pnl >= 0) wins.push(pnl)
-    else losses.push(pnl)
-  }
-
-  // -----------------------------
-  // WIN RATE
-  // -----------------------------
-  const winRate = wins.length / trades.length
-
-  // -----------------------------
-  // AVERAGES
-  // -----------------------------
-  const avgWin =
-    wins.length > 0 ? wins.reduce((a, b) => a + b, 0) / wins.length : 0
-
-  const avgLoss =
-    losses.length > 0 ? losses.reduce((a, b) => a + b, 0) / losses.length : 0
-
-  // -----------------------------
-  // SHARPE RATIO (simplified)
-  // -----------------------------
-  const mean = trades.reduce((sum, t) => sum + (t.pnl ?? 0), 0) / trades.length
-
-  const variance =
-    trades.reduce((sum, t) => sum + Math.pow((t.pnl ?? 0) - mean, 2), 0) /
-    trades.length
-
-  const stdDev = Math.sqrt(variance)
-
-  const sharpe = stdDev === 0 ? 0 : mean / stdDev
-
-  // -----------------------------
-  // RESULT
-  // -----------------------------
   return {
-    totalPnL,
-    winRate,
-    avgWin,
-    avgLoss,
-    sharpe,
-    maxDrawdown,
     trades: trades.length,
+    totalPnL: getTotalPnL(),
+    winRate: getWinRate(),
+    sharpe: getSharpeRatio(),
+    maxDrawdown: Math.max(...getDrawdownCurve(), 0),
+    avgWin:
+      wins.length > 0 ? wins.reduce((a, b) => a + b.pnl, 0) / wins.length : 0,
+    avgLoss:
+      losses.length > 0
+        ? losses.reduce((a, b) => a + b.pnl, 0) / losses.length
+        : 0,
   }
 }

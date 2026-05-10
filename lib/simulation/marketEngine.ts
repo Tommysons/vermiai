@@ -1,71 +1,39 @@
-import { random } from './randomEngine'
+import { getMemoryState } from './aiMemoryEngine'
 
-type PricePoint = {
-  price: number
-  timestamp: number
+type Market = Record<string, number>
+
+const market: Market = {
+  BTC: 50000,
+  ETH: 3000,
+  SOL: 120,
 }
 
-// -----------------------------
-// SIMPLE MARKET STATE
-// -----------------------------
-const market: Record<string, number> = {
-  BTC: 65000,
-  ETH: 3200,
-  USDC: 1,
-}
-
-// -----------------------------
-// MARKET HISTORY STORAGE
-// -----------------------------
-const history: Record<string, PricePoint[]> = {
-  BTC: [],
-  ETH: [],
-  USDC: [],
-}
-
-// -----------------------------
-// GET CURRENT MARKET
-// -----------------------------
-export function getMarket(): Record<string, number> {
+export function getMarket() {
   return market
 }
 
 // -----------------------------
-// UPDATE HISTORY (call every tick)
-// -----------------------------
-export function updateMarketHistory() {
-  const now = Date.now()
-
-  for (const coin in market) {
-    if (!history[coin]) history[coin] = []
-
-    history[coin].push({
-      price: market[coin],
-      timestamp: now,
-    })
-
-    // keep memory small
-    if (history[coin].length > 200) {
-      history[coin].shift()
-    }
-  }
-}
-
-// -----------------------------
-// GET MARKET HISTORY (🔥 FIXED EXPORT)
-// -----------------------------
-export function getMarketHistory(coin: string): PricePoint[] {
-  return history[coin] ?? []
-}
-
-// -----------------------------
-// OPTIONAL: SIMPLE PRICE FLUCTUATION (SIMULATION)
+// PRICE UPDATE
 // -----------------------------
 export function tickMarket() {
-  for (const coin in market) {
-    const change = (random() - 0.5) * 0.02 // ±1%
-    market[coin] = Math.max(0.1, market[coin] * (1 + change))
+  const memory = getMemoryState()
+  const trades = memory.trades ?? []
+
+  for (const coin of Object.keys(market)) {
+    const change = (Math.random() - 0.5) * 0.02
+    market[coin] = Math.max(1, market[coin] * (1 + change))
   }
 
-  updateMarketHistory()
+  // safe iteration
+  for (const trade of trades) {
+    if (trade.status !== 'open') continue
+
+    const age = Date.now() - trade.openedAt
+
+    if (age > 60000) {
+      // placeholder
+    }
+  }
+
+  return market
 }

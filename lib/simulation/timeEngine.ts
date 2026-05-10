@@ -1,63 +1,26 @@
-import { setSeed, nextTick } from './randomEngine'
-import { tickMarket } from './marketEngine'
-import { getAIAdviceV2 } from './aiAdvisorV2'
+import { tickMarket, getMarket } from './marketEngine'
+import { getMemoryState, closeTrade } from './aiMemoryEngine'
 import { runAIExecution } from './executionEngine'
-import { buildPortfolio } from './portfolioEngine'
-import { getPortfolioValue } from './valueEngine'
-import { maybeTriggerNews } from './newsEngine'
 
-export type SimulationDay = {
-  day: number
-  portfolio: ReturnType<typeof buildPortfolio>
-  value: number
-  action: string
-  note: string
-  execution: ReturnType<typeof runAIExecution>
-}
-
-/**
- * Deterministic full market simulation
- * Same seed = same result every time
- */
-export function runSimulation(
-  days: number,
-  seed: number = 12345,
-): SimulationDay[] {
-  const history: SimulationDay[] = []
-
-  // -----------------------------
-  // 1. RESET RANDOM ENGINE
-  // -----------------------------
-  setSeed(seed)
-
-  // -----------------------------
-  // 2. SIMULATION LOOP
-  // -----------------------------
-  for (let day = 1; day <= days; day++) {
-    // Market evolves deterministically
-    nextTick()
+export function runSimulation(days: number) {
+  for (let i = 0; i < days; i++) {
     tickMarket()
-    maybeTriggerNews()
 
-    // AI decision based on current state
-    const ai = getAIAdviceV2()
+    const market = getMarket()
+    const memory = getMemoryState()
 
-    // Execute decision (writes transactions)
-    const execution = runAIExecution()
+    runAIExecution()
 
-    // Snapshot AFTER execution
-    const portfolio = buildPortfolio()
-    const value = getPortfolioValue()
+    for (const trade of memory.trades) {
+      if (trade.status !== 'open') continue
 
-    history.push({
-      day,
-      portfolio,
-      value,
-      action: ai.action,
-      note: ai.reason,
-      execution,
-    })
+      const price = market[trade.coin] ?? trade.entryPrice
+
+      const age = Date.now() - trade.openedAt
+
+      if (age > 3 * 24 * 60 * 60 * 1000 || Math.random() > 0.6) {
+        closeTrade(trade.id, price)
+      }
+    }
   }
-
-  return history
 }

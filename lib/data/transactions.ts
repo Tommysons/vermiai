@@ -103,14 +103,14 @@ export function seedTransactions() {
       id: crypto.randomUUID(),
       type: 'buy',
       coin: 'BTC',
-      amount: 500,
+      amount: 0.05,
       date: new Date().toISOString(),
     },
     {
       id: crypto.randomUUID(),
-      type: 'earn',
-      coin: 'USDC',
-      amount: 50,
+      type: 'buy',
+      coin: 'ETH',
+      amount: 0.5,
       date: new Date().toISOString(),
     },
     {
@@ -118,7 +118,7 @@ export function seedTransactions() {
       type: 'swap',
       from: 'USDC',
       to: 'ETH',
-      amount: 200,
+      amount: 0.1,
       date: new Date().toISOString(),
     },
   ])

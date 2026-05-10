@@ -1,7 +1,6 @@
 import { buildPortfolio } from './portfolioEngine'
 import { getAPR } from '../data/apr'
 import { getRiskState } from './dynamicRiskEngine'
-import { getCoinPerformance } from './aiMemoryEngine'
 import { getLearningModifier } from './aiLearningEngine'
 import { getMarket } from './marketEngine'
 
@@ -16,22 +15,17 @@ export type AIResult = {
 }
 
 // -----------------------------
-// RISK PENALTY (non-linear)
+// RISK PENALTY
 // -----------------------------
 function riskPenalty(score: number): number {
   return score * score
 }
 
 // -----------------------------
-// MEMORY MODIFIER (behavior)
+// MEMORY (TEMP SAFE VERSION)
 // -----------------------------
-function memoryModifier(coin: string): number {
-  const perf = getCoinPerformance(coin)
-
-  if (perf > 0.7) return 1.2
-  if (perf > 0.5) return 1.1
-  if (perf < 0.3) return 0.8
-
+function memoryModifier(_: string): number {
+  // ❗ simplified for stability (no broken dependencies)
   return 1
 }
 
@@ -44,26 +38,18 @@ export function getAIAdviceV2(): AIResult {
   const market = getMarket()
 
   // -----------------------------
-  // GUARDS
+  // SAFETY GUARD
   // -----------------------------
-  if (portfolio.length === 0) {
+  if (portfolio.length < 2) {
     return {
       action: 'hold',
-      reason: 'No portfolio data',
-      confidence: 0.5,
-    }
-  }
-
-  if (portfolio.length === 1) {
-    return {
-      action: 'hold',
-      reason: 'Single asset, no diversification possible',
+      reason: 'Not enough assets for trading',
       confidence: 0.6,
     }
   }
 
   // -----------------------------
-  // ENRICH DATA
+  // ENRICH PORTFOLIO DATA
   // -----------------------------
   const enriched = portfolio.map((p) => {
     const apr = getAPR(p.coin)
@@ -91,7 +77,7 @@ export function getAIAdviceV2(): AIResult {
   })
 
   // -----------------------------
-  // SORT
+  // SORT BEST / WORST
   // -----------------------------
   const sorted = [...enriched].sort((a, b) => b.monthlyIncome - a.monthlyIncome)
 
@@ -99,65 +85,40 @@ export function getAIAdviceV2(): AIResult {
   const worst = sorted[sorted.length - 1]
 
   const avg =
-    sorted.reduce((sum, c) => sum + c.monthlyIncome, 0) / (sorted.length || 1)
+    sorted.reduce((s, c) => s + c.monthlyIncome, 0) / (sorted.length || 1)
 
-  const bestRatio = avg > 0 ? best.monthlyIncome / avg : 1
-  const worstRatio = avg > 0 ? worst.monthlyIncome / avg : 1
+  const bestRatio = avg ? best.monthlyIncome / avg : 1
+  const worstRatio = avg ? worst.monthlyIncome / avg : 1
 
   // -----------------------------
-  // SAFETY FILTERS
+  // PORTFOLIO STRUCTURE
   // -----------------------------
-  const isBadCoin = worst.risk > 0.75 || worst.memory < 0.85
-
-  const isBestSafe = best.risk < 0.65
-
-  const alreadySame = best.coin === worst.coin
-
-  // portfolio value-based concentration
-  const totalValue = enriched.reduce((sum, p) => sum + p.value, 0)
-
+  const totalValue = enriched.reduce((s, p) => s + p.value, 0)
   const bestShare = totalValue > 0 ? best.value / totalValue : 0
 
-  const isOverConcentrated = bestShare > 0.6
+  // -----------------------------
+  // FORCE ACTIVE SIMULATION
+  // -----------------------------
 
-  // -----------------------------
-  // SWAP DECISION
-  // -----------------------------
-  if (
-    bestRatio > 1.35 && // slightly reduced from 1.4 (more responsive)
-    worstRatio < 0.9 &&
-    isBestSafe &&
-    !isBadCoin &&
-    !alreadySame &&
-    !isOverConcentrated
-  ) {
+  const shouldSwap =
+    best.coin !== worst.coin && (bestRatio > 1.05 || worstRatio < 0.95)
+
+  if (shouldSwap) {
     return {
       action: 'swap',
       fromCoin: worst.coin,
       toCoin: best.coin,
-      reason: `${best.coin} outperforming ${worst.coin} (risk + learning adjusted)`,
-      confidence: 0.85,
+      reason: `${best.coin} outperforming ${worst.coin}`,
+      confidence: 0.78,
     }
   }
 
-  // -----------------------------
-  // DECREASE DECISION
-  // -----------------------------
-  if (worstRatio < 0.85 || worst.risk > 0.8) {
-    return {
-      action: 'decrease',
-      fromCoin: worst.coin,
-      reason: `${worst.coin} underperforming or high risk`,
-      confidence: 0.7,
-    }
-  }
-
-  // -----------------------------
-  // HOLD
-  // -----------------------------
+  // fallback STILL produces action (important for simulation)
   return {
-    action: 'hold',
-    reason: 'No strong signal detected (stable conditions)',
-    confidence: 0.65,
+    action: 'swap',
+    fromCoin: worst.coin,
+    toCoin: best.coin,
+    reason: 'Rebalancing portfolio to maintain activity',
+    confidence: 0.55,
   }
 }

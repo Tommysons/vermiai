@@ -1,68 +1,52 @@
 import { getMemoryState } from './aiMemoryEngine'
 
 // -----------------------------
-// AI LEARNING ENGINE
-// -----------------------------
-// Turns trade history into learning signals
-
-type LearningSignal = {
-  coin: string
-  avgPnL: number
-  trades: number
-  score: number // -1 to +1
-}
-
-// -----------------------------
-// CLOSED TRADES ONLY
+// SAFE: get closed trades
 // -----------------------------
 function getClosedTrades() {
   const memory = getMemoryState()
 
-  return memory.history.filter(
-    (t) => t.pnl !== undefined && t.exitPrice !== undefined,
+  const trades = Array.isArray(memory?.trades) ? memory.trades : []
+
+  return trades.filter(
+    (t) => t.status === 'closed' && t.exitPrice !== undefined,
   )
 }
 
 // -----------------------------
-// PERFORMANCE PER COIN
+// SIMPLE LEARNING SIGNAL
 // -----------------------------
-export function getCoinLearningSignals(): LearningSignal[] {
-  const trades = getClosedTrades()
+export function getCoinLearningSignals(coin: string) {
+  const trades = getClosedTrades().filter((t) => t.coin === coin)
 
-  const map: Record<string, { pnlSum: number; count: number }> = {}
-
-  for (const t of trades) {
-    if (!map[t.coin]) {
-      map[t.coin] = { pnlSum: 0, count: 0 }
+  if (!trades.length) {
+    return {
+      successRate: 0.5,
+      confidence: 0.5,
     }
-
-    map[t.coin].pnlSum += t.pnl ?? 0
-    map[t.coin].count += 1
   }
 
-  return Object.entries(map).map(([coin, data]) => {
-    const avgPnL = data.pnlSum / data.count
+  const wins = trades.filter(
+    (t) => (t.exitPrice! - t.entryPrice) / t.entryPrice > 0,
+  ).length
 
-    // normalize to -1 → +1
-    const score = Math.max(-1, Math.min(1, avgPnL * 5))
+  const successRate = wins / trades.length
 
-    return {
-      coin,
-      avgPnL,
-      trades: data.count,
-      score,
-    }
-  })
+  return {
+    successRate,
+    confidence: Math.min(1, successRate + 0.2),
+  }
 }
 
 // -----------------------------
-// AI LEARNING MODIFIER
+// MAIN MODIFIER
 // -----------------------------
-export function getLearningModifier(coin: string): number {
-  const signals = getCoinLearningSignals()
+export function getLearningModifier(coin: string) {
+  const signal = getCoinLearningSignals(coin)
 
-  const found = signals.find((s) => s.coin === coin)
-  if (!found) return 1
+  if (signal.successRate > 0.7) return 1.2
+  if (signal.successRate > 0.5) return 1.1
+  if (signal.successRate < 0.3) return 0.85
 
-  return 1 + found.score * 0.3
+  return 1
 }

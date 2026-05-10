@@ -1,30 +1,42 @@
-type TradeMemory = {
+export type TradeStatus = 'open' | 'closed'
+
+export type Trade = {
   id: string
   coin: string
-  action: 'buy' | 'sell' | 'swap'
+  action: 'swap'
   amount: number
   entryPrice: number
   exitPrice?: number
   pnl?: number
-  timestamp: number
+  status: TradeStatus
+  openedAt: number
+  closedAt?: number
 }
 
 type MemoryState = {
-  history: TradeMemory[]
+  trades: Trade[]
 }
 
-const STORAGE_KEY = 'vermi_ai_memory'
+const STORAGE_KEY = 'vermi_trade_lifecycle'
 
 // -----------------------------
-// LOAD
+// LOAD SAFE MEMORY
 // -----------------------------
-function load(): MemoryState {
-  if (typeof window === 'undefined') {
-    return { history: [] }
+export function getMemoryState(): MemoryState {
+  if (typeof window === 'undefined') return { trades: [] }
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return { trades: [] }
+
+    const parsed = JSON.parse(raw)
+
+    return {
+      trades: Array.isArray(parsed?.trades) ? parsed.trades : [],
+    }
+  } catch {
+    return { trades: [] }
   }
-
-  const data = localStorage.getItem(STORAGE_KEY)
-  return data ? (JSON.parse(data) as MemoryState) : { history: [] }
 }
 
 // -----------------------------
@@ -35,73 +47,48 @@ function save(state: MemoryState) {
 }
 
 // -----------------------------
-// RECORD TRADE (OPEN TRADE)
+// RECORD TRADE (OPEN)
 // -----------------------------
-export function recordTrade(memory: TradeMemory) {
-  const state = load()
+export function recordTrade(trade: Omit<Trade, 'status'>) {
+  const state = getMemoryState()
 
-  state.history.push(memory)
-
-  if (state.history.length > 300) {
-    state.history.shift()
-  }
+  state.trades.push({
+    ...trade,
+    status: 'open',
+  })
 
   save(state)
 }
 
 // -----------------------------
-// CLOSE TRADE + CALCULATE PnL
+// CLOSE TRADE
 // -----------------------------
 export function closeTrade(id: string, exitPrice: number) {
-  const state = load()
+  const state = getMemoryState()
 
-  const trade = state.history.find((t) => t.id === id)
-  if (!trade || trade.exitPrice !== undefined) return
+  const trade = state.trades.find((t) => t.id === id)
+  if (!trade || trade.status === 'closed') return
 
   trade.exitPrice = exitPrice
-
-  const pnl = (exitPrice - trade.entryPrice) / trade.entryPrice
-  trade.pnl = +pnl.toFixed(4)
+  trade.pnl = (exitPrice - trade.entryPrice) / trade.entryPrice
+  trade.status = 'closed'
+  trade.closedAt = Date.now()
 
   save(state)
 }
 
 // -----------------------------
-// COIN PERFORMANCE (🔥 REAL PnL BASED)
+// OPEN TRADES
 // -----------------------------
-export function getCoinPerformance(coin: string): number {
-  const state = load()
-
-  const trades = state.history.filter(
-    (t) => t.coin === coin && t.pnl !== undefined,
-  )
-
-  if (trades.length === 0) return 0
-
-  let score = 0
-
-  for (const t of trades) {
-    score += t.pnl ?? 0
-  }
-
-  return score / trades.length
+export function getOpenTrades(): Trade[] {
+  const state = getMemoryState()
+  return state.trades.filter((t) => t.status === 'open')
 }
 
 // -----------------------------
-// MEMORY PENALTY (AI RISK SIGNAL)
+// CLOSED TRADES
 // -----------------------------
-export function getMemoryPenalty(coin: string): number {
-  const perf = getCoinPerformance(coin)
-
-  if (perf < -0.05) return 0.3
-  if (perf < 0) return 0.1
-
-  return 0
-}
-
-// -----------------------------
-// DEBUG
-// -----------------------------
-export function getMemoryState(): MemoryState {
-  return load()
+export function getClosedTrades(): Trade[] {
+  const state = getMemoryState()
+  return state.trades.filter((t) => t.status === 'closed')
 }

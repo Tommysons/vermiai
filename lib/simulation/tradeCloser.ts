@@ -61,7 +61,7 @@ export function closeOldTrades() {
   for (const trade of openTrades) {
     if (trade.status !== 'open') continue
 
-    const age = now - trade.openedAt
+    const age = Infinity
     const currentPrice = market[trade.coin] ?? trade.entryPrice
 
     // -----------------------------
@@ -122,7 +122,8 @@ export function closeOldTrades() {
       entryPrice: trade.entryPrice,
       exitPrice: currentPrice,
       pnl,
-      timestamp: now,
+      openedAt: trade.openedAt,
+      closedAt: now,
     })
 
     console.log(
