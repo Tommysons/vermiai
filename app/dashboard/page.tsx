@@ -1,15 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import CoinCard from '../components/CoinCard'
+import PortfolioSummary from '../components/PortfolioSummary'
+import TransferPannel from '../components/TransferPannel'
+import type { Coin, PortfolioInputs } from '../../types/portfolio'
 
-type PortfolioInputs = {
-  BTC: string
-  ETH: string
-  SOL: string
-  TON: string
-  BNB: string
-  USDC: string
-}
+type CoinKey = keyof PortfolioInputs
+
+// type PortfolioInputs = {
+//   BTC: string
+//   ETH: string
+//   SOL: string
+//   TON: string
+//   BNB: string
+//   USDC: string
+// }
+
+// type Coin = keyof PortfolioInputs
 
 const emptyPortfolio: PortfolioInputs = {
   BTC: '',
@@ -131,92 +139,70 @@ export default function DashboardPage() {
     setTotal(value)
   }, [portfolio, prices])
 
+  function transferFounds(from: Coin, to: Coin, amount: number) {
+    if (!prices) return
+
+    const fromPrice = prices[from]
+    const toPrice = prices[to]
+
+    const usdValue = amount * fromPrice
+    const converted = usdValue / toPrice
+
+    setPortfolio((prev) => ({
+      ...prev,
+      [from]: String(Number(prev[from]) - amount),
+      [to]: String(Number(prev[to]) + converted),
+    }))
+  }
+
   return (
-    <div
-      style={{
-        padding: 20,
-        maxWidth: 500,
-        margin: '0 auto',
-        fontFamily: 'sans-serif',
-      }}
-    >
-      <h1>VermiAI Dashboard</h1>
+    <div className='max-w-xl mx-auto p-6 text-white'>
+      <h1 className='text-2xl font-bold mb-6'>VermiAI Dashboard</h1>
 
-      <h2>Total Value</h2>
+      {/*Summary*/}
+      <PortfolioSummary total={total} />
 
-      <div
-        style={{
-          fontSize: 32,
-          fontWeight: 'bold',
-          marginBottom: 20,
-        }}
-      >
-        ${total.toFixed(2)}
-      </div>
-
+      {/*Refresh prices*/}
       <button
         onClick={loadPrice}
-        style={{
-          marginBottom: 20,
-          padding: '10px 20px',
-          cursor: 'pointer',
-        }}
+        className='mb-6 px-4 py-2 bg-zinc-800 rounded-lg 
+            hover:bg-zinc-700'
       >
         Refresh Prices
       </button>
 
-      <h2>Portfolio</h2>
-
+      {/*Coins*/}
+      <h2 className='text-lg font-semibold mb-3'>Portfolio</h2>
       {Object.keys(portfolio).map((coin) => (
-        <div
+        <CoinCard
           key={coin}
-          style={{
-            marginBottom: 12,
-            display: 'flex',
-            gap: 10,
-            alignItems: 'center',
-          }}
-        >
-          <label
-            style={{
-              width: 100,
-              fontWeight: 'bold',
-            }}
-          >
-            {coin}
-          </label>
-
-          <input
-            type='number'
-            step='0.00001'
-            value={portfolio[coin as keyof PortfolioInputs]}
-            onChange={(e) =>
-              updateCoin(coin as keyof PortfolioInputs, e.target.value)
-            }
-            placeholder='0'
-            style={{
-              flex: 1,
-              padding: 8,
-            }}
-          />
-        </div>
+          coin={coin}
+          value={portfolio[coin as CoinKey] ?? ''}
+          price={prices?.[coin]}
+          onChange={(value) => updateCoin(coin as keyof PortfolioInputs, value)}
+        />
       ))}
 
+      {/*Save button*/}
       <button
         onClick={savePortfolio}
         disabled={loading}
-        style={{
-          marginTop: 20,
-          padding: '10px 20px',
-          cursor: 'pointer',
-        }}
+        className='mt-4 w-full py-2 bg-blue-600 hover:bg-blue-500
+            rounded-lg'
       >
         {loading ? 'Saving...' : 'Save Portfolio'}
       </button>
 
-      <h2 style={{ marginTop: 40 }}>Live Prices</h2>
+      {/*Transfer pannel*/}
+      <TransferPannel
+        coins={Object.keys(portfolio) as CoinKey[]}
+        onTransfer={transferFounds}
+      />
 
-      <pre>{JSON.stringify(prices, null, 2)}</pre>
+      {/*Raw data debug*/}
+      <pre className='mt-6 text-xs text-gray-400'>
+        {JSON.stringify(prices, null, 2)}
+      </pre>
     </div>
   )
 }
