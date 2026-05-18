@@ -4,5 +4,5 @@ export const tokenMap = {
   SOL: 'solana',
   TON: 'the-open-network',
   BNB: 'binancecoin',
-  GOMINING: 'gomining-token',
+  // GOMINING: 'gomining-token',
 }

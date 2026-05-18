@@ -1,29 +1,23 @@
+import { COINS } from '@/lib/coins'
+
 export async function GET() {
-  const [mainRes, gominingRes] = await Promise.all([
-    fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,the-open-network,binancecoin&vs_currencies=usd',
-      {
-        cache: 'no-store',
-      },
-    ),
+  const ids = Object.values(COINS)
+    .map((c) => c.id)
+    .join(',')
 
-    fetch('https://api.coingecko.com/api/v3/coins/gomining-token', {
-      cache: 'no-store',
-    }),
-  ])
+  const res = await fetch(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,
+    { cache: 'no-store' },
+  )
 
-  const main = await mainRes.json()
-  const gomining = await gominingRes.json()
+  const data = await res.json()
 
-  console.log(gomining)
+  const prices: Record<string, number> = {}
 
-  return Response.json({
-    BTC: main.bitcoin?.usd ?? 0,
-    ETH: main.ethereum?.usd ?? 0,
-    SOL: main.solana?.usd ?? 0,
-    TON: main['the-open-network']?.usd ?? 0,
-    BNB: main.binancecoin?.usd ?? 0,
+  for (const key in COINS) {
+    const coin = COINS[key as keyof typeof COINS]
+    prices[key] = data[coin.id]?.usd ?? 0
+  }
 
-    USDC: 1,
-  })
+  return Response.json(prices)
 }
