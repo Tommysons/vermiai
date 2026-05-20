@@ -8,6 +8,9 @@ import TransactionHistory from '../components/TransactionHistory'
 import PortfolioChart from '../components/PortfolioChart'
 
 import type { PortfolioInputs } from '../../types/portfolio'
+import { clear } from 'console'
+import { set } from 'mongoose'
+import { read } from 'fs'
 
 type CoinKey = keyof PortfolioInputs
 const COINS: CoinKey[] = ['BTC', 'ETH', 'SOL', 'TON', 'BNB', 'USDC']
@@ -26,6 +29,7 @@ export default function DashboardPage() {
   const [prices, setPrices] = useState<Record<string, number> | null>(null)
   const [loading, setLoading] = useState(false)
   const [transactions, setTransactions] = useState<any[]>([])
+  const [ready, setReady] = useState(false)
 
   // -----------------------------
   // LOAD PORTFOLIO
@@ -48,9 +52,19 @@ export default function DashboardPage() {
   // LOAD PRICES
   // -----------------------------
   async function loadPrice() {
-    const res = await fetch('/api/prices')
-    const data = await res.json()
-    setPrices(data)
+    try {
+      const res = await fetch('/api/prices')
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch prices')
+      }
+
+      const data = await res.json()
+
+      setPrices(data)
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   // -----------------------------
@@ -91,11 +105,20 @@ export default function DashboardPage() {
   // INITIAL LOAD
   // -----------------------------
   useEffect(() => {
-    loadPortfolio()
-    loadPrice()
-    loadTransactions()
+    async function init() {
+      await Promise.all([loadPortfolio(), loadPrice(), loadTransactions()])
+      setReady(true)
+    }
+    init()
   }, [])
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadPrice()
+    }, 30000) // every 30 seconds
+
+    return () => clearInterval(interval)
+  }, [])
   // -----------------------------
   // CHART DATA (FIXED)
   // -----------------------------
@@ -108,6 +131,39 @@ export default function DashboardPage() {
   })
 
   const totalValue = chartData.reduce((sum, i) => sum + i.value, 0)
+
+  async function transferFunds(from: CoinKey, to: CoinKey, amount: number) {
+    try {
+      const res = await fetch('/api/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to, amount }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error)
+        return
+      }
+
+      setPortfolio({
+        BTC: data.portfolio.BTC,
+        ETH: data.portfolio.ETH,
+        SOL: data.portfolio.SOL,
+        TON: data.portfolio.TON,
+        BNB: data.portfolio.BNB,
+        USDC: data.portfolio.USDC,
+      })
+
+      await loadTransactions()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  if (!ready) {
+    return <div className='p-10 text-white'>Loading VermiAI...</div>
+  }
 
   return (
     <div className='max-w-xl mx-auto p-6 text-white'>
@@ -150,7 +206,7 @@ export default function DashboardPage() {
       </button>
 
       {/* TRANSFER */}
-      <TransferPannel coins={COINS} onTransfer={() => {}} />
+      <TransferPannel coins={COINS} onTransfer={transferFunds} />
 
       {/* HISTORY */}
       <TransactionHistory transactions={transactions} />

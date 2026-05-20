@@ -1,6 +1,20 @@
 import { COINS, type Coin } from './coins'
 
+let cachedPrices: Record<Coin, number> | null = null
+let lastFetch = 0
+const CACHE_DURATION = 30 * 1000 // 30 seconds
+
 export async function getPrices(): Promise<Record<Coin, number>> {
+  const now = Date.now()
+  //Return Cache if still valid
+  if (cachedPrices && now - lastFetch < CACHE_DURATION) {
+    console.log('Using cached prices')
+    return cachedPrices
+  }
+
+  //Fetch from coingecko
+  console.log('Fetching fresh prices from CoinGecko')
+
   const ids = Object.values(COINS)
     .map((coin) => coin.id)
     .join(',')
@@ -14,7 +28,7 @@ export async function getPrices(): Promise<Record<Coin, number>> {
 
   const data = await res.json()
 
-  return {
+  const prices: Record<Coin, number> = {
     BTC: data.bitcoin?.usd ?? 0,
     ETH: data.ethereum?.usd ?? 0,
     SOL: data.solana?.usd ?? 0,
@@ -22,4 +36,9 @@ export async function getPrices(): Promise<Record<Coin, number>> {
     BNB: data.binancecoin?.usd ?? 0,
     USDC: data['usd-coin']?.usd ?? 1,
   }
+
+  //save Cache
+  cachedPrices = prices
+  lastFetch = now
+  return prices
 }
