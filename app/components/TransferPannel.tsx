@@ -1,42 +1,40 @@
-import { useState } from 'react'
+'use client'
 
+import { useState } from 'react'
 import { PortfolioInputs } from '../../types/portfolio'
 
 type CoinKey = keyof PortfolioInputs
 
 type Props = {
   coins: CoinKey[]
-  onTransfer: (from: CoinKey, to: CoinKey, amount: number) => void
+  onTransfer: (from: CoinKey, to: CoinKey, amount: number, fee: number) => void
 }
 
 export default function TransferPannel({ coins, onTransfer }: Props) {
   const [from, setFrom] = useState<CoinKey>('BTC')
   const [to, setTo] = useState<CoinKey>('ETH')
   const [amount, setAmount] = useState('')
+  const [fee, setFee] = useState(0.5)
 
   return (
-    <div
-      className='mt-8 p-5 border border-gray-800 rounded-2xl
-        bg-zinc-950'
-    >
-      <h2 className='text-white font-semibold mt-4'>Transfer Funds</h2>
+    <div className='mt-8 p-5 border border-gray-800 rounded-2xl bg-zinc-950'>
+      <h2 className='text-white font-semibold mb-4'>Transfer Funds</h2>
 
-      <div className='flex gap-2 mg-3'>
+      <div className='flex gap-2 mb-3'>
         <select
           value={from}
           onChange={(e) => setFrom(e.target.value as CoinKey)}
-          className='flex-1 p-2 bg-zinc-900 border
-                    border-gray-700 rounded-lg text-white'
+          className='flex-1 p-2 bg-zinc-900 border border-gray-700 rounded-lg text-white'
         >
           {coins.map((coin) => (
             <option key={coin}>{coin}</option>
           ))}
         </select>
+
         <select
           value={to}
           onChange={(e) => setTo(e.target.value as CoinKey)}
-          className='flex-1 p-2 bg-zinc-900 border
-                    border-gray-700 rounded-lg text-white'
+          className='flex-1 p-2 bg-zinc-900 border border-gray-700 rounded-lg text-white'
         >
           {coins.map((coin) => (
             <option key={coin}>{coin}</option>
@@ -49,17 +47,26 @@ export default function TransferPannel({ coins, onTransfer }: Props) {
         placeholder='Amount'
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        className='w-full p-2 mb-3 bg-zinc-900 border
-                border-gray-700 rounded-lg text-white'
+        className='w-full p-2 mb-3 bg-zinc-900 border border-gray-700 rounded-lg text-white'
       />
+
+      <div className='mb-4'>
+        <label className='text-xs text-gray-400'>Fee (%)</label>
+        <input
+          type='number'
+          step='0.1'
+          value={fee}
+          onChange={(e) => setFee(Number(e.target.value))}
+          className='w-full p-2 bg-zinc-800 rounded text-white mt-1'
+        />
+      </div>
 
       <button
         onClick={() => {
-          onTransfer(from, to, Number(amount))
+          onTransfer(from, to, Number(amount), fee)
           setAmount('')
         }}
-        className='w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500
-                transition text-white font-medium'
+        className='w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium'
       >
         Transfer
       </button>
